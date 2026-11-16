@@ -256,7 +256,9 @@ body.dragging-groups .group .group-body, body.dragging-groups .group .group-prog
 }
 @keyframes modalIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.98); } }
 @media (max-width: 560px) {
-  .modal { top: auto; bottom: 0; transform: translateX(-50%); width: 100vw; border-radius: 22px 22px 0 0; padding-bottom: calc(env(safe-area-inset-bottom) + 22px); animation: sheetIn .22s ease; }
+  .modal { top: auto; bottom: 0; transform: translateX(-50%); width: 100vw; border-radius: 22px 22px 0 0; padding-bottom: calc(env(safe-area-inset-bottom) + 64px); animation: sheetIn .22s ease; }
+  /* En móvil, botones a la izquierda (la marca «Powered by Netlify» ocupa la esquina inferior derecha) */
+  .modal .modal-actions { flex-direction: row-reverse; justify-content: flex-end; }
   @keyframes sheetIn { from { transform: translate(-50%, 30%); opacity: 0; } }
 }
 .modal h2 { font-family: var(--display); font-weight: 650; margin: 0 0 16px; font-size: 24px; letter-spacing: -.01em; }
