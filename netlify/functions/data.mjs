@@ -56,14 +56,27 @@ const normName = (n) => String(n || "").trim().replace(/\s+/g, " ");
 const nameKey = (n) => normName(n).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const hashPassword = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString("hex");
 
+// Escribe solo si la clave no existe (sin depender de onlyIfNew, que no todas las versiones de @netlify/blobs soportan).
+async function setIfNew(store, key, value) {
+  if ((await store.get(key)) !== null) return false;
+  await store.set(key, typeof value === "string" ? value : JSON.stringify(value));
+  return true;
+}
+
 async function getSecret(store) {
   if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
-  let s = await store.get("meta/secret");
-  if (!s) {
-    await store.set("meta/secret", b64u(crypto.randomBytes(32)), { onlyIfNew: true });
-    s = await store.get("meta/secret");
-  }
-  return s;
+  await setIfNew(store, "meta/secret", b64u(crypto.randomBytes(32)));
+  return store.get("meta/secret");
+}
+
+// Las escapadas de antes de existir las cuentas pasan a la primera cuenta que entra o se crea.
+async function claimLegacy(store, user) {
+  const legacy = await store.get("state", { type: "json" });
+  if (!legacy) return;
+  if (!(await setIfNew(store, "meta/legacy-owner", user.id))) return;
+  const mine = (await store.get("data/" + user.id, { type: "json" })) || { trips: [], deleted: {} };
+  await store.setJSON("data/" + user.id, mergeStates(mine, legacy));
+  await store.delete("state");
 }
 function sign(payload, secret) {
   const body = b64u(JSON.stringify(payload));
@@ -106,17 +119,8 @@ export default async (req) => {
       if (String(password || "").length < 4) return json({ error: "La contraseña debe tener al menos 4 caracteres" }, 400);
       const salt = b64u(crypto.randomBytes(16));
       const user = { id: b64u(crypto.randomBytes(12)), name: n, salt, hash: hashPassword(password, salt), createdAt: Date.now() };
-      const { modified } = await store.setJSON("users/" + k, user, { onlyIfNew: true });
-      if (!modified) return json({ error: "Ese nombre ya está en uso" }, 409);
-      // Las escapadas de antes de existir las cuentas pasan a la primera cuenta creada.
-      const legacy = await store.get("state", { type: "json" });
-      if (legacy) {
-        const claimed = await store.set("meta/legacy-owner", user.id, { onlyIfNew: true });
-        if (claimed.modified) {
-          await store.setJSON("data/" + user.id, legacy);
-          await store.delete("state");
-        }
-      }
+      if (!(await setIfNew(store, "users/" + k, user))) return json({ error: "Ese nombre ya está en uso" }, 409);
+      await claimLegacy(store, user);
       return json(session(user, secret));
     }
 
@@ -127,6 +131,7 @@ export default async (req) => {
         await sleep(600);
         return json({ error: "Nombre o contraseña incorrectos" }, 401);
       }
+      await claimLegacy(store, user);
       return json(session(user, secret));
     }
 
