@@ -157,6 +157,25 @@
       items: items.map((text) => ({ id: uid(), text, done: false })),
     }));
   }
+  // Copia grupos (sin marcar). Los que se llaman igual se juntan y no repiten ítems.
+  function mergeGroups(list) {
+    const out = [], byName = new Map();
+    const key = (t) => t.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    for (const g of list) {
+      let dst = byName.get(key(g.name));
+      if (!dst) {
+        dst = { id: uid(), name: g.name, emoji: g.emoji, collapsed: false, items: [], _seen: new Set() };
+        byName.set(key(g.name), dst); out.push(dst);
+      }
+      for (const i of g.items) {
+        if (dst._seen.has(key(i.text))) continue;
+        dst._seen.add(key(i.text));
+        dst.items.push({ id: uid(), text: i.text, done: false });
+      }
+    }
+    return out.map(({ _seen, ...g }) => g);
+  }
+
   function copyGroups(trip) {
     return trip.groups.map((g) => ({
       id: uid(), name: g.name, emoji: g.emoji, collapsed: false,
@@ -665,8 +684,18 @@
           <label class="choice"><input type="radio" name="tpl" value="basica" checked><div><b>Lista básica</b><small>Documentos, ropa, aseo, electrónica…</small></div></label>
           <label class="choice"><input type="radio" name="tpl" value="playa"><div><b>Playa</b><small>Lo básico + bañador, crema, toalla…</small></div></label>
           <label class="choice"><input type="radio" name="tpl" value="montana"><div><b>Montaña</b><small>Capas, equipo, botiquín, comida</small></div></label>
-          ${others.length ? `<label class="choice"><input type="radio" name="tpl" value="copy"><div style="flex:1"><b>Copiar de otra escapada</b><small>Mismos grupos e ítems, todo sin marcar</small>
-            <select name="copyFrom">${others.map((t) => `<option value="${t.id}">${esc((t.emoji || "") + " " + t.name)}</option>`).join("")}</select></div></label>` : ""}
+          ${others.some((t) => t.groups.length) ? `<label class="choice"><input type="radio" name="tpl" value="copy"><div style="flex:1"><b>Elegir grupos de otras escapadas</b><small>Marca solo los grupos que quieras, de una o varias escapadas</small></div></label>
+          <div class="pick-groups" hidden>
+            ${others.filter((t) => t.groups.length).map((t) => `
+              <div class="pick-trip" data-tid="${t.id}">
+                <div class="pick-trip-head"><span>${esc((t.emoji || "🧳") + " " + t.name)}</span><button type="button" class="pick-all">Todos</button></div>
+                <div class="pick-list">${t.groups.map((g) => `
+                  <label class="pick-g"><input type="checkbox" data-tid="${t.id}" data-gid="${g.id}">
+                    <span class="pg-e">${esc(g.emoji || "📦")}</span><span class="pg-n">${esc(g.name)}</span><span class="pg-c">${g.items.length}</span></label>`).join("")}
+                </div>
+              </div>`).join("")}
+            <div class="pick-hint">Si eliges dos grupos con el mismo nombre se juntan en uno, sin ítems repetidos.</div>
+          </div>` : ""}
           <label class="choice"><input type="radio" name="tpl" value="blank"><div><b>En blanco</b><small>Empiezas desde cero</small></div></label>
         </div>
       </div>
@@ -683,15 +712,47 @@
         const auto = { playa: "🏖️", montana: "🏔️" }[r.value];
         if (!emojiChosen && auto) { emoji = auto; paintEmoji(); }
       }));
-      const sel = $("select[name=copyFrom]", m);
-      if (sel) sel.addEventListener("focus", () => { $("input[value=copy]", m).checked = true; });
+      const pick = $(".pick-groups", m);
+      const okBtn = $("[data-ok]", m);
+      const picked = () => $$(".pick-g input:checked", m);
+      const refresh = () => {
+        const copy = $("input[name=tpl]:checked", m).value === "copy";
+        if (pick) pick.hidden = !copy;
+        const n = picked().length;
+        if (n) $("#toast-root").innerHTML = "";
+        okBtn.textContent = copy && n ? `Crear con ${n} grupo${n > 1 ? "s" : ""}` : "Crear escapada";
+        $$(".pick-trip", m).forEach((box) => {
+          const all = $$("input", box).every((c) => c.checked);
+          $(".pick-all", box).textContent = all ? "Ninguno" : "Todos";
+        });
+      };
+      $$("input[name=tpl]", m).forEach((r) => r.addEventListener("change", () => {
+        refresh();
+        if (r.value === "copy" && r.checked) setTimeout(() => pick.scrollIntoView({ behavior: "smooth", block: "nearest" }), 30);
+      }));
+      $$(".pick-g input", m).forEach((c) => c.addEventListener("change", refresh));
+      $$(".pick-all", m).forEach((b) => b.addEventListener("click", () => {
+        const boxes = $$("input", b.closest(".pick-trip"));
+        const all = boxes.every((c) => c.checked);
+        boxes.forEach((c) => (c.checked = !all));
+        refresh();
+      }));
       const create = () => {
         const name = clampText($("input[name=name]", m).value, 80);
         if (!name) { $("input[name=name]", m).focus(); return; }
         const tpl = $("input[name=tpl]:checked", m).value;
         let groups = [];
         if (TEMPLATES[tpl]) groups = makeGroups(TEMPLATES[tpl]);
-        if (tpl === "copy" && sel) { const src = findTrip(sel.value); if (src) groups = copyGroups(src); }
+        if (tpl === "copy") {
+          const chosen = picked();
+          if (!chosen.length) {
+            pick.classList.remove("shake"); void pick.offsetWidth; pick.classList.add("shake");
+            pick.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            toast("Marca al menos un grupo para copiar");
+            return;
+          }
+          groups = mergeGroups(chosen.map((c) => findGroup(findTrip(c.dataset.tid), c.dataset.gid)).filter(Boolean));
+        }
         const trip = { id: uid(), name, emoji, when: clampText($("input[name=when]", m).value, 80), createdAt: Date.now(), updatedAt: 0, groups };
         state.trips.unshift(trip);
         close();
