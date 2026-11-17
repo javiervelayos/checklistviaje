@@ -288,6 +288,9 @@ body.dragging-groups .group .group-body, body.dragging-groups .group .group-prog
 .choice b { display: block; font-size: 15px; }
 .choice small { color: var(--muted); font-size: 13px; }
 .choice select { margin-top: 8px; width: 100%; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 0 8px; }
+.link-btn { display: inline-flex; align-items: center; gap: 8px; margin: -4px 0 14px; color: var(--accent); font-weight: 600; font-size: 15px; padding: 6px 2px; }
+.link-btn svg { width: 17px; height: 17px; }
+.modal > .pick-groups { border-color: var(--line); max-height: 52vh; overflow: auto; }
 .pick-groups { display: grid; gap: 10px; margin-top: 2px; padding: 12px; border-radius: 14px; background: var(--bg); border: 1.5px solid var(--accent); }
 .pick-groups[hidden] { display: none; }
 .pick-trip-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 14px; margin-bottom: 6px; }

@@ -669,6 +669,84 @@
     });
   }
 
+  // ---------- Selector de grupos de otras escapadas ----------
+  function pickerHtml(trips, hidden = false) {
+    return `<div class="pick-groups" ${hidden ? "hidden" : ""}>
+      ${trips.filter((t) => t.groups.length).map((t) => `
+        <div class="pick-trip" data-tid="${t.id}">
+          <div class="pick-trip-head"><span>${esc((t.emoji || "🧳") + " " + t.name)}</span><button type="button" class="pick-all">Todos</button></div>
+          <div class="pick-list">${t.groups.map((g) => `
+            <label class="pick-g"><input type="checkbox" data-tid="${t.id}" data-gid="${g.id}">
+              <span class="pg-e">${esc(g.emoji || "📦")}</span><span class="pg-n">${esc(g.name)}</span><span class="pg-c">${g.items.length}</span></label>`).join("")}
+          </div>
+        </div>`).join("")}
+      <div class="pick-hint">Los grupos con el mismo nombre se juntan en uno, sin ítems repetidos.</div>
+    </div>`;
+  }
+  function wirePicker(m, onChange) {
+    const update = () => {
+      if ($$(".pick-g input:checked", m).length) $("#toast-root").innerHTML = "";
+      $$(".pick-trip", m).forEach((box) => {
+        $(".pick-all", box).textContent = $$("input", box).every((c) => c.checked) ? "Ninguno" : "Todos";
+      });
+      onChange();
+    };
+    $$(".pick-g input", m).forEach((c) => c.addEventListener("change", update));
+    $$(".pick-all", m).forEach((b) => b.addEventListener("click", () => {
+      const boxes = $$("input", b.closest(".pick-trip"));
+      const all = boxes.every((c) => c.checked);
+      boxes.forEach((c) => (c.checked = !all));
+      update();
+    }));
+  }
+  const pickedGroups = (m) => $$(".pick-g input:checked", m)
+    .map((c) => { const t = findTrip(c.dataset.tid); return t && findGroup(t, c.dataset.gid); }).filter(Boolean);
+  const nameKey = (t) => String(t).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Mete grupos copiados en una escapada existente: si ya hay un grupo con ese nombre, añade solo los ítems que falten.
+  function importInto(trip, list) {
+    let newGroups = 0, newItems = 0;
+    for (const g of mergeGroups(list)) {
+      const dst = trip.groups.find((x) => nameKey(x.name) === nameKey(g.name));
+      if (!dst) { trip.groups.push(g); newGroups++; newItems += g.items.length; continue; }
+      const seen = new Set(dst.items.map((i) => nameKey(i.text)));
+      for (const i of g.items) if (!seen.has(nameKey(i.text))) { dst.items.push(i); seen.add(nameKey(i.text)); newItems++; }
+      dst.collapsed = false;
+    }
+    return { newGroups, newItems };
+  }
+
+  function importGroupsDialog(trip) {
+    const others = state.trips.filter((t) => t.id !== trip.id && t.groups.length);
+    if (!others.length) { toast("No hay otras escapadas con grupos para copiar"); return; }
+    modal(`
+      <h2>Añadir grupos de otra escapada</h2>
+      <p>Marca los grupos que quieras traer a «${esc(trip.name)}». Si ya tienes uno con el mismo nombre, solo se añaden los ítems que falten.</p>
+      ${pickerHtml(others)}
+      <div class="modal-actions">
+        <button class="btn ghost" data-close>Cancelar</button>
+        <button class="btn primary" data-ok>Añadir grupos</button>
+      </div>`, (m, close) => {
+      const ok = $("[data-ok]", m);
+      wirePicker(m, () => {
+        const n = pickedGroups(m).length;
+        ok.textContent = n ? `Añadir ${n} grupo${n > 1 ? "s" : ""}` : "Añadir grupos";
+      });
+      ok.addEventListener("click", () => {
+        const list = pickedGroups(m);
+        if (!list.length) { toast("Marca al menos un grupo"); return; }
+        close();
+        let r;
+        withUndo(trip, "", () => { r = importInto(trip, list); });
+        const parts = [];
+        if (r.newGroups) parts.push(`${r.newGroups} grupo${r.newGroups > 1 ? "s" : ""} nuevo${r.newGroups > 1 ? "s" : ""}`);
+        parts.push(`${r.newItems} ítem${r.newItems === 1 ? "" : "s"} añadido${r.newItems === 1 ? "" : "s"}`);
+        const t = $("#toast-root .toast span");
+        if (t) t.textContent = parts.join(" · ");
+      });
+    });
+  }
+
   // ---------- Diálogos ----------
   function newTripDialog() {
     let emoji = "✈️";
@@ -685,17 +763,7 @@
           <label class="choice"><input type="radio" name="tpl" value="playa"><div><b>Playa</b><small>Lo básico + bañador, crema, toalla…</small></div></label>
           <label class="choice"><input type="radio" name="tpl" value="montana"><div><b>Montaña</b><small>Capas, equipo, botiquín, comida</small></div></label>
           ${others.some((t) => t.groups.length) ? `<label class="choice"><input type="radio" name="tpl" value="copy"><div style="flex:1"><b>Elegir grupos de otras escapadas</b><small>Marca solo los grupos que quieras, de una o varias escapadas</small></div></label>
-          <div class="pick-groups" hidden>
-            ${others.filter((t) => t.groups.length).map((t) => `
-              <div class="pick-trip" data-tid="${t.id}">
-                <div class="pick-trip-head"><span>${esc((t.emoji || "🧳") + " " + t.name)}</span><button type="button" class="pick-all">Todos</button></div>
-                <div class="pick-list">${t.groups.map((g) => `
-                  <label class="pick-g"><input type="checkbox" data-tid="${t.id}" data-gid="${g.id}">
-                    <span class="pg-e">${esc(g.emoji || "📦")}</span><span class="pg-n">${esc(g.name)}</span><span class="pg-c">${g.items.length}</span></label>`).join("")}
-                </div>
-              </div>`).join("")}
-            <div class="pick-hint">Si eliges dos grupos con el mismo nombre se juntan en uno, sin ítems repetidos.</div>
-          </div>` : ""}
+          ${pickerHtml(others, true)}` : ""}
           <label class="choice"><input type="radio" name="tpl" value="blank"><div><b>En blanco</b><small>Empiezas desde cero</small></div></label>
         </div>
       </div>
@@ -714,28 +782,17 @@
       }));
       const pick = $(".pick-groups", m);
       const okBtn = $("[data-ok]", m);
-      const picked = () => $$(".pick-g input:checked", m);
+      const picked = () => pickedGroups(m);
       const refresh = () => {
         const copy = $("input[name=tpl]:checked", m).value === "copy";
         if (pick) pick.hidden = !copy;
         const n = picked().length;
-        if (n) $("#toast-root").innerHTML = "";
         okBtn.textContent = copy && n ? `Crear con ${n} grupo${n > 1 ? "s" : ""}` : "Crear escapada";
-        $$(".pick-trip", m).forEach((box) => {
-          const all = $$("input", box).every((c) => c.checked);
-          $(".pick-all", box).textContent = all ? "Ninguno" : "Todos";
-        });
       };
+      wirePicker(m, refresh);
       $$("input[name=tpl]", m).forEach((r) => r.addEventListener("change", () => {
         refresh();
         if (r.value === "copy" && r.checked) setTimeout(() => pick.scrollIntoView({ behavior: "smooth", block: "nearest" }), 30);
-      }));
-      $$(".pick-g input", m).forEach((c) => c.addEventListener("change", refresh));
-      $$(".pick-all", m).forEach((b) => b.addEventListener("click", () => {
-        const boxes = $$("input", b.closest(".pick-trip"));
-        const all = boxes.every((c) => c.checked);
-        boxes.forEach((c) => (c.checked = !all));
-        refresh();
       }));
       const create = () => {
         const name = clampText($("input[name=name]", m).value, 80);
@@ -751,7 +808,7 @@
             toast("Marca al menos un grupo para copiar");
             return;
           }
-          groups = mergeGroups(chosen.map((c) => findGroup(findTrip(c.dataset.tid), c.dataset.gid)).filter(Boolean));
+          groups = mergeGroups(chosen);
         }
         const trip = { id: uid(), name, emoji, when: clampText($("input[name=when]", m).value, 80), createdAt: Date.now(), updatedAt: 0, groups };
         state.trips.unshift(trip);
@@ -771,11 +828,14 @@
     modal(`
       <h2>Nuevo grupo</h2>
       <label class="field"><span>Nombre del grupo</span><input type="text" name="name" placeholder="Ej. Ropa, Aseo, Para el coche…" maxlength="60"></label>
+      ${state.trips.some((t) => t.id !== trip.id && t.groups.length) ? `<button type="button" class="link-btn" data-import>${I.copy} O copia grupos de otra escapada</button>` : ""}
       <div class="field"><span>Icono · toca uno para usar también su nombre</span><div id="gemo">${iconChips(GROUP_ICONS, null)}</div></div>
       <div class="modal-actions">
         <button class="btn ghost" data-close>Cancelar</button>
         <button class="btn primary" data-ok>Añadir grupo</button>
       </div>`, (m, close) => {
+      const imp = $("[data-import]", m);
+      if (imp) imp.addEventListener("click", () => importGroupsDialog(trip));
       let emoji = null, auto = "📦";
       const input = $("input[name=name]", m);
       let autoName = "";
@@ -828,6 +888,7 @@
     const inTrip = route().view === "trip";
     menu(anchor, [
       ["rename", I.edit, "Renombrar"],
+      ...(inTrip ? [["import", I.plus, "Añadir grupos de otra escapada"]] : []),
       ["duplicate", I.copy, "Duplicar escapada"],
       ...(s.done ? [["reset", I.reset, "Desmarcar todo"]] : []),
       ["delete", I.trash, "Eliminar escapada", "danger"],
@@ -844,6 +905,7 @@
             $("input", m).addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
           });
       }
+      if (v === "import") importGroupsDialog(trip);
       if (v === "duplicate") {
         const copy = { id: uid(), name: trip.name + " (copia)", emoji: trip.emoji, when: "", createdAt: Date.now(), updatedAt: 0, groups: copyGroups(trip) };
         state.trips.unshift(copy);
