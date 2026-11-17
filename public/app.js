@@ -4,8 +4,8 @@
   "use strict";
 
   const API = "/api/data";
-  const LS_STATE = "maleta.state.v1";
-  const LS_PIN = "maleta.pin";
+  const LS_STATE = "maleta.state.v1";   // + "." + id de usuario
+  const LS_SESSION = "maleta.session";
   const LS_PREFS = "maleta.prefs";
   const POLL_MS = 20000;
 
@@ -24,6 +24,8 @@
     reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.7L3 8"/><path d="M3 3v5h5"/></svg>',
     eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.4 10.4 0 0112 5c6.5 0 10 7 10 7a17 17 0 01-2.2 3.2M6.6 6.6A17.6 17.6 0 002 12s3.5 7 10 7a9.7 9.7 0 005.4-1.6M3 3l18 18M9.9 9.9a3 3 0 004.2 4.2"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>',
+    logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg>',
     collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20l5-5 5 5M7 4l5 5 5-5"/></svg>',
   };
 
@@ -83,6 +85,12 @@
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const clampText = (s, n = 200) => String(s || "").replace(/\s+/g, " ").trim().slice(0, n);
 
+  // ---------- Sesión ----------
+  // Limpieza de versiones anteriores (datos compartidos sin cuentas)
+  try { localStorage.removeItem(LS_STATE); localStorage.removeItem("maleta.pin"); } catch {}
+  let session = (() => { try { const x = JSON.parse(localStorage.getItem(LS_SESSION)); return x && x.token && x.user ? x : null; } catch { return null; } })();
+  const stateKey = () => LS_STATE + "." + (session ? session.user.id : "none");
+
   // ---------- Estado ----------
   let state = loadLocal();
   let prefs = (() => { try { return JSON.parse(localStorage.getItem(LS_PREFS)) || {}; } catch { return {}; } })();
@@ -91,14 +99,16 @@
   let focusAfterRender = null;
 
   function loadLocal() {
+    if (!session) return { trips: [], deleted: {} };
     try {
-      const s = JSON.parse(localStorage.getItem(LS_STATE));
+      const s = JSON.parse(localStorage.getItem(stateKey()));
       if (s && Array.isArray(s.trips)) return { trips: s.trips, deleted: s.deleted || {} };
     } catch {}
     return { trips: [], deleted: {} };
   }
   function saveLocal() {
-    try { localStorage.setItem(LS_STATE, JSON.stringify(state)); } catch {}
+    if (!session) return;
+    try { localStorage.setItem(stateKey(), JSON.stringify(state)); } catch {}
   }
   function savePrefs() {
     try { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); } catch {}
@@ -187,10 +197,11 @@
   let pushTimer = null, inflight = false, pushQueued = false, retryTimer = null;
 
   async function api(method, body) {
+    if (!session) { const e = new Error("sin sesión"); e.status = 401; throw e; }
     const res = await fetch(API, {
       method,
       cache: "no-store",
-      headers: { "content-type": "application/json", "x-app-pin": localStorage.getItem(LS_PIN) || "" },
+      headers: { "content-type": "application/json", authorization: "Bearer " + session.token },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
@@ -208,14 +219,14 @@
     const el = $(".sync");
     if (!el) return;
     el.dataset.s = s;
-    const labels = { ok: "Sincronizado", saving: "Guardando…", offline: "Sin conexión", error: "Error al sincronizar", local: "Solo en este dispositivo", pin: "Falta el PIN" };
+    const labels = { ok: "Sincronizado", saving: "Guardando…", offline: "Sin conexión", error: "Error al sincronizar", local: "Solo en este dispositivo" };
     $(".label", el).textContent = labels[s] || "";
     el.title = s === "offline" ? "Los cambios se guardan en este dispositivo y se subirán al recuperar la conexión" :
                s === "local" ? "No se encontró el servidor: los datos solo se guardan en este navegador" : labels[s] || "";
   }
 
   function handleSyncError(err) {
-    if (err.status === 401) { setSync("pin"); askPin(); return; }
+    if (err.status === 401) { if (session) logout({ expired: true }); return; }
     if (err.status === 404) { setSync("local"); return; }
     setSync(navigator.onLine ? "error" : "offline");
     clearTimeout(retryTimer);
@@ -231,7 +242,7 @@
   }
 
   async function pull() {
-    if (inflight) return;
+    if (inflight || !session) return;
     try {
       const { state: remote } = await api("GET");
       const needsPush = adoptRemote(remote || { trips: [], deleted: {} });
@@ -246,6 +257,7 @@
   }
 
   async function push() {
+    if (!session) return;
     if (inflight) { pushQueued = true; return; }
     inflight = true;
     try {
@@ -279,6 +291,7 @@
   // ---------- Render ----------
   const app = $("#app");
   function render() {
+    if (!session) { renderLogin(); return; }
     const r = route();
     if (r.view === "trip") {
       const trip = findTrip(r.id);
@@ -293,6 +306,7 @@
     }
   }
 
+  const userBtn = () => `<button class="user-btn" data-act="user-menu" aria-label="Cuenta: ${esc(session.user.name)}"><span class="avatar">${esc(session.user.name.trim()[0].toUpperCase())}</span><span class="uname">${esc(session.user.name)}</span></button>`;
   const syncPill = () => `<div class="sync" data-s="${syncStatus}"><span class="dot"></span><span class="label"></span></div>`;
   const bar = (pct) => `<div class="bar ${pct === 100 ? "full" : ""}"><span style="width:${pct}%"></span></div>`;
 
@@ -319,11 +333,11 @@
     app.innerHTML = `
       <header class="topbar">
         <div class="brand"><span class="brand-mark">🧳</span>Maleta</div>
-        ${syncPill()}
+        <div class="top-right">${syncPill()}${userBtn()}</div>
       </header>
       <main>
         <section class="hero">
-          <h1>Tus escapadas</h1>
+          <h1>Escapadas de ${esc(session.user.name)}</h1>
           <p>Prepara la maleta sin olvidarte de nada.</p>
         </section>
         ${trips.length ? `
@@ -861,25 +875,74 @@
     });
   }
 
-  function askPin() {
-    if ($(".modal")) return;
-    modal(`
-      <h2>Introduce el PIN</h2>
-      <p>Esta Maleta está protegida. Escribe el PIN para ver y guardar tus escapadas en este dispositivo.</p>
-      <label class="field"><span>PIN</span><input type="password" name="pin" autocomplete="current-password" inputmode="numeric"></label>
-      <div class="modal-actions">
-        <button class="btn ghost" data-close>Ahora no</button>
-        <button class="btn primary" data-ok>Entrar</button>
-      </div>`, (m, close) => {
-      const go = () => {
-        localStorage.setItem(LS_PIN, $("input[name=pin]", m).value.trim());
-        close();
-        setSync("saving");
-        pull();
-      };
-      $("[data-ok]", m).addEventListener("click", go);
-      $("input[name=pin]", m).addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  // ---------- Cuentas ----------
+  let loginMode = "login";
+  function renderLogin() {
+    document.title = "Entrar · Maleta";
+    const reg = loginMode === "register";
+    app.innerHTML = `
+      <main class="login">
+        <div class="login-card">
+          <div class="brand big"><span class="brand-mark">🧳</span>Maleta</div>
+          <p class="login-sub">Prepara la maleta de cada escapada sin olvidarte de nada. Cada persona tiene su cuenta y solo ve sus escapadas.</p>
+          <div class="seg" role="tablist">
+            <button type="button" class="${reg ? "" : "on"}" data-mode="login">Entrar</button>
+            <button type="button" class="${reg ? "on" : ""}" data-mode="register">Crear cuenta</button>
+          </div>
+          <form class="login-form" autocomplete="on">
+            <label class="field"><span>Nombre</span><input type="text" name="name" autocomplete="username" autocapitalize="words" maxlength="30" placeholder="Ej. Javier" required></label>
+            <label class="field"><span>Contraseña</span><input type="password" name="password" autocomplete="${reg ? "new-password" : "current-password"}" ${reg ? 'minlength="4"' : ""} placeholder="${reg ? "Mínimo 4 caracteres" : ""}" required></label>
+            <div class="login-error" role="alert"></div>
+            <button class="btn primary wide" type="submit">${reg ? "Crear cuenta y entrar" : "Entrar"}</button>
+          </form>
+          <p class="login-note">${reg ? "Recuerda tu nombre y contraseña: los necesitarás para entrar desde otros dispositivos." : "¿Primera vez? Toca «Crear cuenta»."}</p>
+        </div>
+      </main>`;
+    $$(".seg button", app).forEach((b) => b.addEventListener("click", () => { loginMode = b.dataset.mode; renderLogin(); }));
+    const form = $(".login-form", app);
+    const err = $(".login-error", app);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("button[type=submit]", form);
+      const name = form.elements.name.value.trim(), password = form.elements.password.value;
+      if (!name || !password) return;
+      btn.disabled = true; err.textContent = "";
+      try {
+        const res = await fetch("/api/" + (reg ? "register" : "login"), {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "No se pudo conectar");
+        login(data);
+      } catch (ex) {
+        err.textContent = navigator.onLine ? ex.message : "Sin conexión: necesitas internet para entrar";
+        btn.disabled = false;
+      }
     });
+    setTimeout(() => form.elements.name.focus(), 30);
+  }
+
+  function login(data) {
+    session = { token: data.token, user: data.user };
+    try { localStorage.setItem(LS_SESSION, JSON.stringify(session)); } catch {}
+    state = loadLocal();
+    location.hash = "";
+    setSync("saving");
+    render();
+    pull();
+  }
+
+  async function logout({ expired = false } = {}) {
+    clearTimeout(pushTimer); clearTimeout(retryTimer);
+    if (!expired && syncStatus !== "ok") { try { await push(); } catch {} }
+    try { localStorage.removeItem(stateKey()); localStorage.removeItem(LS_SESSION); } catch {}
+    session = null;
+    state = { trips: [], deleted: {} };
+    closeOverlays();
+    location.hash = "";
+    loginMode = "login";
+    render();
+    if (expired) toast("Tu sesión ha caducado. Vuelve a entrar.");
   }
 
   // ---------- Acciones ----------
@@ -978,6 +1041,9 @@
     switch (act) {
       case "open-trip": location.hash = "#/e/" + el.dataset.id; break;
       case "new-trip": newTripDialog(); break;
+      case "user-menu":
+        menu(el, [["logout", I.logout, `Cerrar sesión (${session.user.name})`]], (v) => { if (v === "logout") logout(); });
+        break;
       case "trip-menu": e.stopPropagation(); tripMenu(el, findTrip(el.dataset.id)); break;
       case "trip-emoji": emojiPicker(el, TRIP_EMOJIS, trip.emoji, (v) => { trip.emoji = v; commit(trip); }); break;
       case "rename-trip": inlineEdit(el, trip.name, (v) => { trip.name = v; commit(trip); }); break;
@@ -1047,7 +1113,7 @@
 
   // ---------- Arranque ----------
   render();
-  pull();
+  if (session) pull();
   setInterval(() => { if (document.visibilityState === "visible") pull(); }, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pull(); });
   window.addEventListener("online", () => push());

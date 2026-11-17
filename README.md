@@ -34,15 +34,14 @@ netlify init           # o: netlify link, si el sitio ya existe
 netlify deploy --prod
 ```
 
-## Proteger con un PIN (opcional, recomendable)
+## Cuentas de usuario
 
-Sin PIN, cualquiera que conozca la URL podría ver y cambiar tus listas. Para evitarlo:
+Cada persona crea su cuenta con **nombre y contraseña** y solo ve sus escapadas. La sesión queda recordada en cada dispositivo (1 año) y se cierra desde el botón con la inicial, arriba a la derecha.
 
-1. En Netlify: **Site configuration → Environment variables → Add a variable**
-2. Nombre: `APP_PIN` · Valor: el PIN que quieras (p. ej. `4826`)
-3. Vuelve a desplegar (**Deploys → Trigger deploy**).
-
-La app pedirá el PIN una vez en cada dispositivo y lo recordará.
+- Las contraseñas se guardan cifradas (scrypt); las sesiones van firmadas.
+- Las escapadas creadas antes de existir las cuentas pasaron a la **primera cuenta** que se creó.
+- Para que nadie más pueda crear cuentas: en Netlify, *Environment variables* → `ALLOW_SIGNUP` = `false` y volver a desplegar. Las cuentas existentes siguen funcionando.
+- No hay recuperación de contraseña: si alguien la olvida, hay que borrar su usuario en *Data & Storage → Blobs* (store `maleta`, clave `users/<nombre>`) y que vuelva a registrarse; sus datos están en `data/<id>`.
 
 ## Cómo funciona la sincronización
 

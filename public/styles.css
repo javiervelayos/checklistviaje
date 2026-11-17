@@ -332,3 +332,24 @@ body.dragging-groups .group .group-body, body.dragging-groups .group .group-prog
   .toolbar .collapse-all { margin-left: auto; }
 }
 @media (max-width: 360px) { .trips { grid-template-columns: 1fr; } }
+
+/* ---------- Cuenta ---------- */
+.top-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.user-btn { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px 3px 3px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); max-width: 150px; }
+.user-btn:hover { background: var(--bg-2); }
+.avatar { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
+.uname { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 560px) { .uname { display: none; } .user-btn { padding-right: 3px; } }
+
+.login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px calc(env(safe-area-inset-bottom) + 70px); }
+.login-card { width: min(400px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow-lg); padding: 28px 24px; }
+.brand.big { font-size: 30px; gap: 12px; margin-bottom: 8px; }
+.brand.big .brand-mark { width: 44px; height: 44px; font-size: 24px; border-radius: 13px; }
+.login-sub { color: var(--ink-2); margin: 0 0 20px; line-height: 1.45; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg-2); border-radius: 12px; padding: 4px; margin-bottom: 18px; }
+.seg button { height: 38px; border-radius: 9px; font-weight: 600; color: var(--ink-2); }
+.seg button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+.btn.wide { width: 100%; justify-content: center; height: 48px; font-size: 16px; }
+.btn:disabled { opacity: .6; }
+.login-error { color: var(--danger); font-size: 14px; min-height: 18px; margin: -4px 0 10px; }
+.login-note { color: var(--muted); font-size: 13px; margin: 14px 0 0; text-align: center; }
