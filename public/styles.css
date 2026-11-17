@@ -353,3 +353,12 @@ body.dragging-groups .group .group-body, body.dragging-groups .group .group-prog
 .btn:disabled { opacity: .6; }
 .login-error { color: var(--danger); font-size: 14px; min-height: 18px; margin: -4px 0 10px; }
 .login-note { color: var(--muted); font-size: 13px; margin: 14px 0 0; text-align: center; }
+
+.user-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.user-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--bg); }
+.user-list .avatar { width: 36px; height: 36px; font-size: 16px; }
+.ul-main { flex: 1; min-width: 0; }
+.ul-main b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ul-main small { color: var(--muted); font-size: 13px; }
+.user-list .btn { height: 36px; padding: 0 12px; font-size: 14px; flex: none; }
+.temp-pw { font: 700 30px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .04em; text-align: center; padding: 18px; border-radius: 14px; background: var(--accent-soft); color: var(--ink); user-select: all; -webkit-user-select: all; }

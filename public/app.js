@@ -25,6 +25,8 @@
     eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.4 10.4 0 0112 5c6.5 0 10 7 10 7a17 17 0 01-2.2 3.2M6.6 6.6A17.6 17.6 0 002 12s3.5 7 10 7a9.7 9.7 0 005.4-1.6M3 3l18 18M9.9 9.9a3 3 0 004.2 4.2"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>',
+    key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M17 6l3 3M14 9l2 2"/></svg>',
+    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14.5a6.5 6.5 0 013.5 5.5"/></svg>',
     logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg>',
     collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20l5-5 5 5M7 4l5 5 5-5"/></svg>',
   };
@@ -212,6 +214,26 @@
     const ct = res.headers.get("content-type") || "";
     if (!ct.includes("json")) { const e = new Error("no json"); e.status = 404; throw e; }
     return res.json();
+  }
+
+  async function authFetch(path, { method = "GET", body } = {}) {
+    const res = await fetch(path, {
+      method, cache: "no-store",
+      headers: { "content-type": "application/json", authorization: "Bearer " + (session ? session.token : "") },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { logout({ expired: true }); throw new Error(data.error || "Sesión no válida"); }
+    if (!res.ok) throw new Error(data.error || "No se pudo completar");
+    return data;
+  }
+  function saveSession() { try { localStorage.setItem(LS_SESSION, JSON.stringify(session)); } catch {} }
+  async function refreshMe() {
+    try {
+      const { user } = await authFetch("/api/me");
+      session.user = user; saveSession();
+      if (user.mustChange) changePasswordDialog({ forced: true });
+    } catch {}
   }
 
   function setSync(s) {
@@ -626,7 +648,7 @@
     });
   }
 
-  function modal(html, onMount) {
+  function modal(html, onMount, { locked = false } = {}) {
     closeOverlays();
     const back = document.createElement("div");
     back.className = "backdrop";
@@ -636,8 +658,10 @@
     m.innerHTML = html;
     overlayRoot.append(back, m);
     const close = () => { closeOverlays(); if (pendingRemoteRender) { pendingRemoteRender = false; render(); } };
-    back.addEventListener("click", close);
-    m.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    if (!locked) {
+      back.addEventListener("click", close);
+      m.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    }
     $$("[data-close]", m).forEach((b) => b.addEventListener("click", close));
     onMount && onMount(m, close);
     const first = $("input[type=text], input[type=password]", m);
@@ -895,7 +919,7 @@
             <div class="login-error" role="alert"></div>
             <button class="btn primary wide" type="submit">${reg ? "Crear cuenta y entrar" : "Entrar"}</button>
           </form>
-          <p class="login-note">${reg ? "Recuerda tu nombre y contraseña: los necesitarás para entrar desde otros dispositivos." : "¿Primera vez? Toca «Crear cuenta»."}</p>
+          <p class="login-note">${reg ? "Recuerda tu nombre y contraseña: los necesitarás para entrar desde otros dispositivos." : "¿Primera vez? Toca «Crear cuenta».<br>¿Olvidaste la contraseña? Pide a quien administra la app que te dé una temporal."}</p>
         </div>
       </main>`;
     $$(".seg button", app).forEach((b) => b.addEventListener("click", () => { loginMode = b.dataset.mode; renderLogin(); }));
@@ -913,7 +937,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || "No se pudo conectar");
-        login(data);
+        login(data, password);
       } catch (ex) {
         err.textContent = navigator.onLine ? ex.message : "Sin conexión: necesitas internet para entrar";
         btn.disabled = false;
@@ -922,14 +946,83 @@
     setTimeout(() => form.elements.name.focus(), 30);
   }
 
-  function login(data) {
+  function login(data, password) {
     session = { token: data.token, user: data.user };
-    try { localStorage.setItem(LS_SESSION, JSON.stringify(session)); } catch {}
+    saveSession();
     state = loadLocal();
     location.hash = "";
     setSync("saving");
     render();
     pull();
+    if (data.user.mustChange) changePasswordDialog({ forced: true, current: password });
+  }
+
+  function changePasswordDialog({ forced = false, current = "" } = {}) {
+    modal(`
+      <h2>${forced ? "Elige tu nueva contraseña" : "Cambiar contraseña"}</h2>
+      ${forced ? `<p>Estás usando una contraseña temporal. Elige una nueva para seguir.</p>` : ""}
+      <form class="pw-form" autocomplete="on">
+        <input type="text" name="username" autocomplete="username" value="${esc(session.user.name)}" hidden>
+        ${forced && current ? "" : `<label class="field"><span>${forced ? "Contraseña temporal" : "Contraseña actual"}</span><input type="password" name="current" autocomplete="current-password" required></label>`}
+        <label class="field"><span>Nueva contraseña</span><input type="password" name="next" autocomplete="new-password" minlength="4" placeholder="Mínimo 4 caracteres" required></label>
+        <label class="field"><span>Repite la nueva contraseña</span><input type="password" name="repeat" autocomplete="new-password" minlength="4" required></label>
+        <div class="login-error" role="alert"></div>
+        <div class="modal-actions">
+          ${forced ? "" : `<button type="button" class="btn ghost" data-close>Cancelar</button>`}
+          <button type="submit" class="btn primary">Guardar contraseña</button>
+        </div>
+      </form>`, (m, close) => {
+      const f = $(".pw-form", m), err = $(".login-error", m);
+      f.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const next = f.elements.next.value, cur = f.elements.current ? f.elements.current.value : current;
+        if (next !== f.elements.repeat.value) { err.textContent = "Las dos contraseñas nuevas no coinciden"; return; }
+        const btn = $("button[type=submit]", f); btn.disabled = true; err.textContent = "";
+        try {
+          const data = await authFetch("/api/password", { method: "POST", body: { current: cur, next } });
+          session = { token: data.token, user: data.user }; saveSession();
+          close();
+          toast("Contraseña cambiada. Se ha cerrado la sesión en tus otros dispositivos.");
+        } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+      });
+    }, { locked: forced });
+  }
+
+  async function usersDialog() {
+    let users = [];
+    try { ({ users } = await authFetch("/api/admin/users")); } catch (ex) { toast(ex.message); return; }
+    const fmt = (t) => t ? new Date(t).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "";
+    modal(`
+      <h2>Usuarios</h2>
+      <p>Si alguien olvida su contraseña, dale una temporal. Al entrar con ella tendrá que elegir una nueva, y se cerrará su sesión en los demás dispositivos.</p>
+      <ul class="user-list">${users.map((u) => `
+        <li><span class="avatar">${esc(u.name.trim()[0].toUpperCase())}</span>
+          <div class="ul-main"><b>${esc(u.name)}</b><small>${u.admin ? "Administrador · tú" : "Desde " + fmt(u.createdAt)}</small></div>
+          ${u.admin ? "" : `<button type="button" class="btn" data-reset="${esc(u.name)}">${I.key} Restablecer</button>`}
+        </li>`).join("")}
+      </ul>
+      <div class="modal-actions"><button class="btn primary" data-close>Hecho</button></div>`, (m, close) => {
+      $$("[data-reset]", m).forEach((b) => b.addEventListener("click", () => {
+        const name = b.dataset.reset;
+        confirmDialog({ title: `¿Restablecer la contraseña de ${name}?`, text: "Su contraseña actual dejará de funcionar y se cerrará su sesión en todos sus dispositivos. Sus escapadas no se tocan.", ok: "Restablecer", danger: false }, async () => {
+          try {
+            const r = await authFetch("/api/admin/reset", { method: "POST", body: { name } });
+            modal(`
+              <h2>Contraseña temporal de ${esc(r.name)}</h2>
+              <p>Pásasela a ${esc(r.name)}. Al entrar con ella tendrá que elegir una nueva.</p>
+              <div class="temp-pw">${esc(r.password)}</div>
+              <div class="modal-actions">
+                <button class="btn" data-copy>${I.copy} Copiar</button>
+                <button class="btn primary" data-close>Hecho</button>
+              </div>`, (m2) => {
+              $("[data-copy]", m2).addEventListener("click", async () => {
+                try { await navigator.clipboard.writeText(r.password); toast("Copiada"); } catch { toast("No se pudo copiar: apúntala"); }
+              });
+            });
+          } catch (ex) { toast(ex.message); }
+        });
+      }));
+    });
   }
 
   async function logout({ expired = false } = {}) {
@@ -1042,7 +1135,15 @@
       case "open-trip": location.hash = "#/e/" + el.dataset.id; break;
       case "new-trip": newTripDialog(); break;
       case "user-menu":
-        menu(el, [["logout", I.logout, `Cerrar sesión (${session.user.name})`]], (v) => { if (v === "logout") logout(); });
+        menu(el, [
+          ["password", I.key, "Cambiar contraseña"],
+          ...(session.user.admin ? [["users", I.users, "Usuarios y contraseñas"]] : []),
+          ["logout", I.logout, `Cerrar sesión (${session.user.name})`],
+        ], (v) => {
+          if (v === "password") changePasswordDialog();
+          if (v === "users") usersDialog();
+          if (v === "logout") logout();
+        });
         break;
       case "trip-menu": e.stopPropagation(); tripMenu(el, findTrip(el.dataset.id)); break;
       case "trip-emoji": emojiPicker(el, TRIP_EMOJIS, trip.emoji, (v) => { trip.emoji = v; commit(trip); }); break;
@@ -1113,7 +1214,7 @@
 
   // ---------- Arranque ----------
   render();
-  if (session) pull();
+  if (session) { pull(); refreshMe(); }
   setInterval(() => { if (document.visibilityState === "visible") pull(); }, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pull(); });
   window.addEventListener("online", () => push());

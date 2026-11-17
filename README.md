@@ -41,7 +41,8 @@ Cada persona crea su cuenta con **nombre y contraseña** y solo ve sus escapadas
 - Las contraseñas se guardan cifradas (scrypt); las sesiones van firmadas.
 - Las escapadas creadas antes de existir las cuentas pasaron a la **primera cuenta** que se creó.
 - Para que nadie más pueda crear cuentas: en Netlify, *Environment variables* → `ALLOW_SIGNUP` = `false` y volver a desplegar. Las cuentas existentes siguen funcionando.
-- No hay recuperación de contraseña: si alguien la olvida, hay que borrar su usuario en *Data & Storage → Blobs* (store `maleta`, clave `users/<nombre>`) y que vuelva a registrarse; sus datos están en `data/<id>`.
+- **Cambiar contraseña:** menú de la inicial → «Cambiar contraseña». Cierra la sesión en los demás dispositivos.
+- **Contraseña olvidada:** la cuenta administradora (la que se quedó las escapadas antiguas o, si no, la más antigua) tiene «Usuarios y contraseñas» en su menú. Ahí puede dar una contraseña temporal a cualquiera; al entrar con ella hay que elegir una nueva y se cierran sus sesiones abiertas. Las escapadas no se tocan.
 
 ## Cómo funciona la sincronización
 
