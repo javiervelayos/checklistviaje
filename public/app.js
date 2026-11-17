@@ -920,7 +920,7 @@
           <form class="login-form" autocomplete="on">
             <label class="field"><span>Nombre</span><input type="text" name="name" autocomplete="username" autocapitalize="words" maxlength="30" placeholder="Ej. Javier" required></label>
             <label class="field"><span>Contraseña</span><input type="password" name="password" autocomplete="${reg ? "new-password" : "current-password"}" ${reg ? 'minlength="4"' : ""} placeholder="${reg ? "Mínimo 4 caracteres" : ""}" required></label>
-            ${reg ? `<label class="field"><span>Email <small class="opt">(recomendado: sirve para recuperar la contraseña)</small></span><input type="email" name="email" autocomplete="email" inputmode="email" placeholder="tu@email.com"></label>` : ""}
+            ${reg ? `<label class="field"><span>Email <small class="opt">(recomendado)</small></span><input type="email" name="email" autocomplete="email" inputmode="email" placeholder="tu@email.com"><small class="hint">Se usará exclusivamente para restablecer tu contraseña si la olvidas. Nunca para publicidad ni otros fines.</small></label>` : ""}
             <div class="login-error" role="alert"></div>
             <button class="btn primary wide" type="submit">${reg ? "Crear cuenta y entrar" : "Entrar"}</button>
           </form>
@@ -1022,7 +1022,7 @@
     const cur = session.user.email || "";
     modal(`
       <h2>${nudge ? "Añade tu email" : "Mi email"}</h2>
-      <p>${nudge ? "Si algún día olvidas la contraseña, te enviaremos ahí un enlace para cambiarla. Solo se usa para eso." : "Lo usamos solo para enviarte un enlace si olvidas la contraseña."}</p>
+      <p>${nudge ? "Si algún día olvidas la contraseña, te enviaremos ahí un enlace para cambiarla. Se usará exclusivamente para restablecer tu contraseña." : "Se usará exclusivamente para restablecer tu contraseña si la olvidas."}</p>
       <form class="email-form">
         <label class="field"><span>Email</span><input type="email" name="email" autocomplete="email" inputmode="email" value="${esc(cur)}" placeholder="tu@email.com"></label>
         <div class="login-error" role="alert"></div>
