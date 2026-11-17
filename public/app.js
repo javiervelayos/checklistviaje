@@ -1,4 +1,4 @@
-/* Maleta — checklist de equipaje por escapada.
+/* MiMaleta — checklist de equipaje por escapada.
    Datos: se guardan en este dispositivo (localStorage) y se sincronizan con /api/data (Netlify Blobs). */
 (() => {
   "use strict";
@@ -25,6 +25,7 @@
     eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.4 10.4 0 0112 5c6.5 0 10 7 10 7a17 17 0 01-2.2 3.2M6.6 6.6A17.6 17.6 0 002 12s3.5 7 10 7a9.7 9.7 0 005.4-1.6M3 3l18 18M9.9 9.9a3 3 0 004.2 4.2"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
     key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M17 6l3 3M14 9l2 2"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14.5a6.5 6.5 0 013.5 5.5"/></svg>',
     logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg>',
@@ -233,6 +234,7 @@
       const { user } = await authFetch("/api/me");
       session.user = user; saveSession();
       if (user.mustChange) changePasswordDialog({ forced: true });
+      else if (!user.email && !prefs.emailNudged && !$(".modal")) emailDialog({ nudge: true });
     } catch {}
   }
 
@@ -313,6 +315,8 @@
   // ---------- Render ----------
   const app = $("#app");
   function render() {
+    const rm = location.hash.match(/^#\/restablecer\/([\w-]+)/);
+    if (rm) { renderReset(rm[1]); return; }
     if (!session) { renderLogin(); return; }
     const r = route();
     if (r.view === "trip") {
@@ -333,7 +337,7 @@
   const bar = (pct) => `<div class="bar ${pct === 100 ? "full" : ""}"><span style="width:${pct}%"></span></div>`;
 
   function renderHome() {
-    document.title = "Maleta · Checklist de viaje";
+    document.title = "MiMaleta · Checklist de viaje";
     const trips = state.trips;
     const cards = trips.map((t) => {
       const s = stats(t);
@@ -354,7 +358,7 @@
 
     app.innerHTML = `
       <header class="topbar">
-        <div class="brand"><span class="brand-mark">🧳</span>Maleta</div>
+        <div class="brand"><span class="brand-mark">🧳</span>MiMaleta</div>
         <div class="top-right">${syncPill()}${userBtn()}</div>
       </header>
       <main>
@@ -377,7 +381,7 @@
   }
 
   function renderTrip(trip) {
-    document.title = `${trip.name} · Maleta`;
+    document.title = `${trip.name} · MiMaleta`;
     const s = stats(trip);
     const hideDone = !!prefs.hideDone;
     const groups = trip.groups.map((g) => {
@@ -902,12 +906,12 @@
   // ---------- Cuentas ----------
   let loginMode = "login";
   function renderLogin() {
-    document.title = "Entrar · Maleta";
+    document.title = "Entrar · MiMaleta";
     const reg = loginMode === "register";
     app.innerHTML = `
       <main class="login">
         <div class="login-card">
-          <div class="brand big"><span class="brand-mark">🧳</span>Maleta</div>
+          <div class="brand big"><span class="brand-mark">🧳</span>MiMaleta</div>
           <p class="login-sub">Prepara la maleta de cada escapada sin olvidarte de nada. Cada persona tiene su cuenta y solo ve sus escapadas.</p>
           <div class="seg" role="tablist">
             <button type="button" class="${reg ? "" : "on"}" data-mode="login">Entrar</button>
@@ -916,36 +920,130 @@
           <form class="login-form" autocomplete="on">
             <label class="field"><span>Nombre</span><input type="text" name="name" autocomplete="username" autocapitalize="words" maxlength="30" placeholder="Ej. Javier" required></label>
             <label class="field"><span>Contraseña</span><input type="password" name="password" autocomplete="${reg ? "new-password" : "current-password"}" ${reg ? 'minlength="4"' : ""} placeholder="${reg ? "Mínimo 4 caracteres" : ""}" required></label>
+            ${reg ? `<label class="field"><span>Email <small class="opt">(recomendado: sirve para recuperar la contraseña)</small></span><input type="email" name="email" autocomplete="email" inputmode="email" placeholder="tu@email.com"></label>` : ""}
             <div class="login-error" role="alert"></div>
             <button class="btn primary wide" type="submit">${reg ? "Crear cuenta y entrar" : "Entrar"}</button>
           </form>
-          <p class="login-note">${reg ? "Recuerda tu nombre y contraseña: los necesitarás para entrar desde otros dispositivos." : "¿Primera vez? Toca «Crear cuenta».<br>¿Olvidaste la contraseña? <b>Ponte en contacto con Javi</b>."}</p>
+          ${reg ? "" : `<button type="button" class="link-btn forgot-btn" data-forgot>¿Olvidaste la contraseña?</button>`}
+          <p class="login-note">${reg ? "Recuerda tu nombre y contraseña: los necesitarás para entrar desde otros dispositivos." : "¿Primera vez? Toca «Crear cuenta»."}</p>
         </div>
       </main>`;
     $$(".seg button", app).forEach((b) => b.addEventListener("click", () => { loginMode = b.dataset.mode; renderLogin(); }));
+    const fb = $("[data-forgot]", app);
+    if (fb) fb.addEventListener("click", () => forgotDialog($(".login-form", app).elements.name.value.trim()));
     const form = $(".login-form", app);
     const err = $(".login-error", app);
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const btn = $("button[type=submit]", form);
       const name = form.elements.name.value.trim(), password = form.elements.password.value;
+      const email = form.elements.email ? form.elements.email.value.trim() : "";
       if (!name || !password) return;
       btn.disabled = true; err.textContent = "";
       try {
         const res = await fetch("/api/" + (reg ? "register" : "login"), {
-          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, password }),
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reg ? { name, password, email } : { name, password }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || "No se pudo conectar");
         login(data, password);
       } catch (ex) {
         err.textContent = !navigator.onLine ? "Sin conexión: necesitas internet para entrar"
-          : /incorrect/i.test(ex.message) ? ex.message + ". ¿La has olvidado? Ponte en contacto con Javi."
+          : /incorrect/i.test(ex.message) ? ex.message + ". ¿La has olvidado? Toca «¿Olvidaste la contraseña?»."
           : ex.message;
         btn.disabled = false;
       }
     });
     setTimeout(() => form.elements.name.focus(), 30);
+  }
+
+  function forgotDialog(prefill = "") {
+    modal(`
+      <h2>¿Olvidaste la contraseña?</h2>
+      <p>Escribe tu nombre o tu email. Si tu cuenta tiene un email guardado, te enviaremos un enlace para elegir una nueva.</p>
+      <form class="forgot-form">
+        <label class="field"><span>Nombre o email</span><input type="text" name="who" autocomplete="username" value="${esc(prefill)}" required></label>
+        <div class="login-error" role="alert"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" data-close>Cancelar</button>
+          <button type="submit" class="btn primary">Enviar enlace</button>
+        </div>
+      </form>
+      <p class="login-note">¿Tu cuenta no tiene email? Pide a Javi que te dé una contraseña temporal.</p>`, (m, close) => {
+      const f = $(".forgot-form", m), err = $(".login-error", m);
+      f.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = $("button[type=submit]", f); btn.disabled = true; err.textContent = "";
+        try {
+          const res = await fetch("/api/forgot", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: f.elements.who.value.trim() }) });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "No se pudo enviar");
+          modal(`<h2>Revisa tu correo 📬</h2><p>${esc(data.message)}</p><p class="login-note">El enlace caduca en 1 hora. Si no llega, espera un par de minutos antes de pedir otro.</p>
+            <div class="modal-actions"><button class="btn primary" data-close>Entendido</button></div>`);
+        } catch (ex) { err.textContent = navigator.onLine ? ex.message : "Sin conexión"; btn.disabled = false; }
+      });
+    });
+  }
+
+  function renderReset(token) {
+    document.title = "Nueva contraseña · MiMaleta";
+    app.innerHTML = `
+      <main class="login">
+        <div class="login-card">
+          <div class="brand big"><span class="brand-mark">🧳</span>MiMaleta</div>
+          <p class="login-sub">Elige una nueva contraseña para tu cuenta.</p>
+          <form class="reset-form">
+            <label class="field"><span>Nueva contraseña</span><input type="password" name="next" autocomplete="new-password" minlength="4" placeholder="Mínimo 4 caracteres" required></label>
+            <label class="field"><span>Repite la contraseña</span><input type="password" name="repeat" autocomplete="new-password" minlength="4" required></label>
+            <div class="login-error" role="alert"></div>
+            <button class="btn primary wide" type="submit">Guardar y entrar</button>
+          </form>
+          <p class="login-note"><a href="#" class="link-btn">Volver a entrar</a></p>
+        </div>
+      </main>`;
+    const f = $(".reset-form", app), err = $(".login-error", app);
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (f.elements.next.value !== f.elements.repeat.value) { err.textContent = "Las dos contraseñas no coinciden"; return; }
+      const btn = $("button[type=submit]", f); btn.disabled = true; err.textContent = "";
+      try {
+        const res = await fetch("/api/reset", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, password: f.elements.next.value }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "No se pudo cambiar");
+        if (session) { try { localStorage.removeItem(stateKey()); } catch {} }
+        login(data);
+        toast("Contraseña cambiada. ¡Bienvenido de nuevo!");
+      } catch (ex) { err.textContent = navigator.onLine ? ex.message : "Sin conexión"; btn.disabled = false; }
+    });
+    setTimeout(() => f.elements.next.focus(), 30);
+  }
+
+  function emailDialog({ nudge = false } = {}) {
+    const cur = session.user.email || "";
+    modal(`
+      <h2>${nudge ? "Añade tu email" : "Mi email"}</h2>
+      <p>${nudge ? "Si algún día olvidas la contraseña, te enviaremos ahí un enlace para cambiarla. Solo se usa para eso." : "Lo usamos solo para enviarte un enlace si olvidas la contraseña."}</p>
+      <form class="email-form">
+        <label class="field"><span>Email</span><input type="email" name="email" autocomplete="email" inputmode="email" value="${esc(cur)}" placeholder="tu@email.com"></label>
+        <div class="login-error" role="alert"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" data-close>${nudge ? "Ahora no" : "Cancelar"}</button>
+          <button type="submit" class="btn primary">Guardar</button>
+        </div>
+      </form>`, (m, close) => {
+      const f = $(".email-form", m), err = $(".login-error", m);
+      if (nudge) { prefs.emailNudged = true; savePrefs(); }
+      f.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = $("button[type=submit]", f); btn.disabled = true; err.textContent = "";
+        try {
+          const { user } = await authFetch("/api/email", { method: "POST", body: { email: f.elements.email.value.trim() } });
+          session.user = user; saveSession();
+          close();
+          toast(user.email ? "Email guardado" : "Email eliminado");
+        } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+      });
+    });
   }
 
   function login(data, password) {
@@ -957,6 +1055,7 @@
     render();
     pull();
     if (data.user.mustChange) changePasswordDialog({ forced: true, current: password });
+    else if (!data.user.email && !prefs.emailNudged) setTimeout(() => { if (!$(".modal")) emailDialog({ nudge: true }); }, 600);
   }
 
   function changePasswordDialog({ forced = false, current = "" } = {}) {
@@ -999,7 +1098,7 @@
       <p>Si alguien olvida su contraseña, dale una temporal. Al entrar con ella tendrá que elegir una nueva, y se cerrará su sesión en los demás dispositivos.</p>
       <ul class="user-list">${users.map((u) => `
         <li><span class="avatar">${esc(u.name.trim()[0].toUpperCase())}</span>
-          <div class="ul-main"><b>${esc(u.name)}</b><small>${u.admin ? "Administrador · tú" : "Desde " + fmt(u.createdAt)}</small></div>
+          <div class="ul-main"><b>${esc(u.name)}</b><small>${u.admin ? "Administrador · tú" : "Desde " + fmt(u.createdAt)}${u.hasEmail ? " · ✉️ con email" : " · sin email"}</small></div>
           ${u.admin ? "" : `<button type="button" class="btn" data-reset="${esc(u.name)}">${I.key} Restablecer</button>`}
         </li>`).join("")}
       </ul>
@@ -1138,10 +1237,12 @@
       case "new-trip": newTripDialog(); break;
       case "user-menu":
         menu(el, [
+          ["email", I.mail, session.user.email ? "Mi email" : "Añadir email"],
           ["password", I.key, "Cambiar contraseña"],
           ...(session.user.admin ? [["users", I.users, "Usuarios y contraseñas"]] : []),
           ["logout", I.logout, `Cerrar sesión (${session.user.name})`],
         ], (v) => {
+          if (v === "email") emailDialog();
           if (v === "password") changePasswordDialog();
           if (v === "users") usersDialog();
           if (v === "logout") logout();

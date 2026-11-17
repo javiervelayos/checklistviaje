@@ -1,5 +1,5 @@
-// API de Maleta: cuentas de usuario + datos de cada usuario en Netlify Blobs.
-//   POST /api/register  { name, password }  -> { token, user }
+// API de MiMaleta: cuentas de usuario + datos de cada usuario en Netlify Blobs + recuperación de contraseña por email (Brevo).
+//   POST /api/register  { name, password, email? }  -> { token, user }
 //   POST /api/login     { name, password }  -> { token, user }
 //   GET  /api/data      (Authorization: Bearer <token>) -> { state }
 //   PUT  /api/data      { state } -> fusiona con lo guardado y devuelve { state }
@@ -8,6 +8,11 @@
 //   GET  /api/admin/users           (solo admin) -> { users: [{ name, createdAt, admin }] }
 //   POST /api/admin/reset { name }  (solo admin) -> { password } contraseña temporal
 //   GET  /api/admin/export          (solo admin) -> copia de usuarios y escapadas
+//   POST /api/email     { email }   -> guarda o cambia el email de la cuenta ("" lo quita)
+//   POST /api/forgot    { who }     -> si la cuenta (nombre o email) tiene email, envía un enlace válido 1 hora
+//   POST /api/reset     { token, password } -> cambia la contraseña con el enlace y abre sesión
+//   POST /api/admin/import (cabecera x-import-key = IMPORT_KEY) -> carga una exportación, solo si no hay usuarios
+// Variables para el email: BREVO_API_KEY, MAIL_FROM, MAIL_FROM_NAME, APP_URL
 // La cuenta administradora es la que se quedó las escapadas antiguas o, si no había, la primera creada.
 // Variables de entorno opcionales:
 //   ALLOW_SIGNUP=false  -> nadie más puede crear cuentas (las existentes siguen funcionando)
@@ -114,7 +119,54 @@ async function getAdminId(store) {
   }
   return id;
 }
-const publicUser = (user, adminId) => ({ id: user.id, name: user.name, admin: !!adminId && user.id === adminId, mustChange: !!user.mustChange });
+const publicUser = (user, adminId) => ({ id: user.id, name: user.name, email: user.email || "", admin: !!adminId && user.id === adminId, mustChange: !!user.mustChange });
+
+// ---------- Email ----------
+const normEmail = (e) => String(e || "").trim().toLowerCase();
+const validEmail = (e) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,}$/i.test(e);
+const sha = (t) => crypto.createHash("sha256").update(String(t)).digest("hex");
+const escHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Asocia un email a un usuario (índice emails/<sha> -> clave del usuario). Devuelve error si ya lo usa otra cuenta.
+async function setUserEmail(store, user, email) {
+  const e = normEmail(email);
+  if (e && !validEmail(e)) return "Ese email no parece válido";
+  if (e) {
+    const owner = await store.get("emails/" + sha(e));
+    if (owner && owner !== nameKey(user.name)) return "Ese email ya lo usa otra cuenta";
+  }
+  if (user.email && normEmail(user.email) !== e) await store.delete("emails/" + sha(normEmail(user.email)));
+  if (e) { await store.set("emails/" + sha(e), nameKey(user.name)); user.email = e; } else delete user.email;
+  return null;
+}
+
+async function sendResetEmail(user, link) {
+  const key = process.env.BREVO_API_KEY, from = process.env.MAIL_FROM;
+  if (!key || !from) throw Object.assign(new Error("El envío de emails no está configurado"), { status: 503 });
+  const appName = process.env.MAIL_FROM_NAME || "MiMaleta";
+  const html = `<!doctype html><html><body style="margin:0;background:#F5EFE6;font-family:Helvetica,Arial,sans-serif;color:#22303A">
+    <div style="max-width:480px;margin:0 auto;padding:32px 20px">
+      <div style="background:#FFFDF9;border-radius:18px;padding:28px 24px;border:1px solid #E7DDCD">
+        <div style="font-size:26px;font-weight:700;margin-bottom:6px">🧳 ${escHtml(appName)}</div>
+        <p style="font-size:16px;line-height:1.5">Hola ${escHtml(user.name)}:</p>
+        <p style="font-size:16px;line-height:1.5">Has pedido cambiar la contraseña de tu cuenta. Pulsa el botón para elegir una nueva. El enlace sirve una sola vez y caduca en 1 hora.</p>
+        <p style="text-align:center;margin:28px 0"><a href="${link}" style="background:#E0603F;color:#fff;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:12px;display:inline-block">Elegir nueva contraseña</a></p>
+        <p style="font-size:13px;line-height:1.5;color:#8C9399">Si no lo has pedido tú, ignora este mensaje: tu contraseña no cambiará.</p>
+      </div>
+    </div></body></html>`;
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": key, "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({
+      sender: { email: from, name: appName },
+      to: [{ email: user.email, name: user.name }],
+      subject: `${appName}: cambia tu contraseña`,
+      htmlContent: html,
+      textContent: `Hola ${user.name}:\n\nPara elegir una nueva contraseña abre este enlace (válido 1 hora, un solo uso):\n${link}\n\nSi no lo has pedido tú, ignora este mensaje.`,
+    }),
+  });
+  if (!res.ok) throw Object.assign(new Error("No se pudo enviar el email (" + res.status + ")"), { status: 502 });
+}
 const session = (user, secret, adminId) => ({
   token: sign({ uid: user.id, nk: nameKey(user.name), pwv: user.pwv || 0, exp: Date.now() + SESSION_DAYS * 864e5 }, secret),
   user: publicUser(user, adminId),
@@ -154,13 +206,16 @@ export default async (req) => {
 
     if (path === "/api/register" && req.method === "POST") {
       if (String(process.env.ALLOW_SIGNUP).toLowerCase() === "false") return json({ error: "No se pueden crear cuentas nuevas" }, 403);
-      const { name, password } = await readBody(req);
+      const { name, password, email } = await readBody(req);
       const n = normName(name), k = nameKey(name);
+      if (email && !validEmail(normEmail(email))) return json({ error: "Ese email no parece válido" }, 400);
+      if (email && (await store.get("emails/" + sha(normEmail(email))))) return json({ error: "Ese email ya lo usa otra cuenta" }, 409);
       if (n.length < 2 || n.length > 30) return json({ error: "El nombre debe tener entre 2 y 30 caracteres" }, 400);
       if (String(password || "").length < 4) return json({ error: "La contraseña debe tener al menos 4 caracteres" }, 400);
       const salt = b64u(crypto.randomBytes(16));
       const user = { id: b64u(crypto.randomBytes(12)), name: n, salt, hash: hashPassword(password, salt), createdAt: Date.now() };
       if (!(await setIfNew(store, "users/" + k, user))) return json({ error: "Ese nombre ya está en uso" }, 409);
+      if (email) { await setUserEmail(store, user, email); await saveUser(store, user); }
       await claimLegacy(store, user);
       return json(session(user, secret, await getAdminId(store)));
     }
@@ -176,11 +231,81 @@ export default async (req) => {
       return json(session(user, secret, await getAdminId(store)));
     }
 
+    if (path === "/api/forgot" && req.method === "POST") {
+      const { who } = await readBody(req);
+      const w = String(who || "").trim();
+      const generic = { ok: true, message: "Si esa cuenta tiene un email guardado, te hemos enviado un enlace. Revisa también la carpeta de spam." };
+      if (!w) return json({ error: "Escribe tu nombre o tu email" }, 400);
+      let user = null;
+      if (w.includes("@")) {
+        const k = await store.get("emails/" + sha(normEmail(w)));
+        if (k) user = await store.get("users/" + k, { type: "json" });
+      } else user = await store.get("users/" + nameKey(w), { type: "json" });
+      if (!user || !user.email) { await sleep(400); return json(generic); }
+      // Máximo un email cada 2 minutos por cuenta
+      const rl = "ratelimit/" + nameKey(user.name);
+      const last = Number(await store.get(rl)) || 0;
+      if (Date.now() - last < 120e3) return json(generic);
+      await store.set(rl, String(Date.now()));
+      const token = b64u(crypto.randomBytes(32));
+      await store.setJSON("resets/" + sha(token), { nk: nameKey(user.name), uid: user.id, exp: Date.now() + 3600e3 });
+      const base = (process.env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+      await sendResetEmail(user, `${base}/#/restablecer/${token}`);
+      return json(generic);
+    }
+
+    if (path === "/api/reset" && req.method === "POST") {
+      const { token, password } = await readBody(req);
+      const key = "resets/" + sha(token || "");
+      const r = await store.get(key, { type: "json" });
+      if (!r || r.exp < Date.now()) { if (r) await store.delete(key); return json({ error: "El enlace no es válido o ha caducado. Pide uno nuevo." }, 400); }
+      if (String(password || "").length < 4) return json({ error: "La contraseña debe tener al menos 4 caracteres" }, 400);
+      const user = await store.get("users/" + r.nk, { type: "json" });
+      if (!user || user.id !== r.uid) { await store.delete(key); return json({ error: "La cuenta ya no existe" }, 400); }
+      user.salt = b64u(crypto.randomBytes(16));
+      user.hash = hashPassword(password, user.salt);
+      user.pwv = (user.pwv || 0) + 1;
+      delete user.mustChange;
+      await saveUser(store, user);
+      await store.delete(key);
+      return json(session(user, secret, await getAdminId(store)));
+    }
+
+    // Carga inicial desde una exportación de Maleta. Solo con IMPORT_KEY y si todavía no hay usuarios.
+    if (path === "/api/admin/import" && req.method === "POST") {
+      const ik = process.env.IMPORT_KEY;
+      const given = req.headers.get("x-import-key") || "";
+      if (!ik || given.length !== ik.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(ik))) return json({ error: "No autorizado" }, 403);
+      const existing = await store.list({ prefix: "users/" });
+      if (existing.blobs.length) return json({ error: "Ya hay usuarios: la importación solo se hace una vez" }, 409);
+      const dump = await readBody(req);
+      if (!Array.isArray(dump.users)) return json({ error: "Exportación no válida" }, 400);
+      let users = 0, trips = 0;
+      for (const u of dump.users) {
+        if (!u || !u.id || !u.name || !u.hash || !u.salt) continue;
+        await store.setJSON("users/" + nameKey(u.name), u);
+        if (u.email) await store.set("emails/" + sha(normEmail(u.email)), nameKey(u.name));
+        const st = dump.data && dump.data[u.id];
+        if (st && isValidState(st)) { await store.setJSON("data/" + u.id, st); trips += st.trips.length; }
+        users++;
+      }
+      for (const k of ["meta/admin", "meta/legacy-owner"]) if (dump.meta && dump.meta[k]) await store.set(k, dump.meta[k]);
+      return json({ ok: true, users, trips });
+    }
+
     // A partir de aquí todo requiere sesión
     const me = await authUser(req, store, secret);
     if (!me) return json({ error: "Sesión no válida" }, 401);
 
     if (path === "/api/me" && req.method === "GET") {
+      return json({ user: publicUser(me, await getAdminId(store)) });
+    }
+
+    if (path === "/api/email" && req.method === "POST") {
+      const { email } = await readBody(req);
+      const err = await setUserEmail(store, me, email);
+      if (err) return json({ error: err }, 400);
+      await saveUser(store, me);
       return json({ user: publicUser(me, await getAdminId(store)) });
     }
 
@@ -204,7 +329,7 @@ export default async (req) => {
         const users = [];
         for (const b of blobs) {
           const u = await store.get(b.key, { type: "json" });
-          if (u) users.push({ name: u.name, createdAt: u.createdAt, admin: u.id === adminId });
+          if (u) users.push({ name: u.name, createdAt: u.createdAt, admin: u.id === adminId, hasEmail: !!u.email });
         }
         users.sort((a, b) => (b.admin - a.admin) || a.name.localeCompare(b.name, "es"));
         return json({ users });
@@ -255,4 +380,4 @@ export default async (req) => {
   }
 };
 
-export const config = { path: ["/api/data", "/api/register", "/api/login", "/api/me", "/api/password", "/api/admin/users", "/api/admin/reset", "/api/admin/export"] };
+export const config = { path: ["/api/data", "/api/register", "/api/login", "/api/me", "/api/password", "/api/admin/users", "/api/admin/reset", "/api/admin/export", "/api/admin/import", "/api/email", "/api/forgot", "/api/reset"] };

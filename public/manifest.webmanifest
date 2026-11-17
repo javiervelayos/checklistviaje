@@ -1,6 +1,6 @@
 {
-  "name": "Maleta · Checklist de viaje",
-  "short_name": "Maleta",
+  "name": "MiMaleta · Checklist de viaje",
+  "short_name": "MiMaleta",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F5EFE6",

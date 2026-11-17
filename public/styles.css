@@ -363,3 +363,9 @@ body.dragging-groups .group .group-body, body.dragging-groups .group .group-prog
 .ul-main small { color: var(--muted); font-size: 13px; }
 .user-list .btn { height: 36px; padding: 0 12px; font-size: 14px; flex: none; }
 .temp-pw { font: 700 30px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .04em; text-align: center; padding: 18px; border-radius: 14px; background: var(--accent-soft); color: var(--ink); user-select: all; -webkit-user-select: all; }
+
+.forgot-btn { display: block; margin: 12px auto 0; font-size: 15px; }
+.field .opt { font-weight: 400; color: var(--muted); }
+.field input[type=email] { width: 100%; height: 46px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); padding: 0 14px; outline: none; font-size: 16px; color: var(--ink); }
+.field input[type=email]:focus { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+.login-note .link-btn { margin: 0; font-size: 13px; }
