@@ -7,6 +7,7 @@
 //   POST /api/password  { current, next } -> nueva sesión; cierra las demás sesiones de ese usuario
 //   GET  /api/admin/users           (solo admin) -> { users: [{ name, createdAt, admin }] }
 //   POST /api/admin/reset { name }  (solo admin) -> { password } contraseña temporal
+//   GET  /api/admin/export          (solo admin) -> copia de usuarios y escapadas
 // La cuenta administradora es la que se quedó las escapadas antiguas o, si no había, la primera creada.
 // Variables de entorno opcionales:
 //   ALLOW_SIGNUP=false  -> nadie más puede crear cuentas (las existentes siguen funcionando)
@@ -208,6 +209,19 @@ export default async (req) => {
         users.sort((a, b) => (b.admin - a.admin) || a.name.localeCompare(b.name, "es"));
         return json({ users });
       }
+      // Copia completa (usuarios, escapadas) para trasladar los datos a otra instalación, p. ej. MiMaleta.
+      if (path === "/api/admin/export" && req.method === "GET") {
+        const out = { exportedAt: Date.now(), users: [], data: {}, meta: {} };
+        for (const k of ["meta/admin", "meta/legacy-owner"]) { const v = await store.get(k); if (v) out.meta[k] = v; }
+        const { blobs } = await store.list({ prefix: "users/" });
+        for (const b of blobs) {
+          const u = await store.get(b.key, { type: "json" });
+          if (!u) continue;
+          out.users.push(u);
+          out.data[u.id] = (await store.get("data/" + u.id, { type: "json" })) || { trips: [], deleted: {} };
+        }
+        return json(out);
+      }
       if (path === "/api/admin/reset" && req.method === "POST") {
         const { name } = await readBody(req);
         const u = await store.get("users/" + nameKey(name), { type: "json" });
@@ -241,4 +255,4 @@ export default async (req) => {
   }
 };
 
-export const config = { path: ["/api/data", "/api/register", "/api/login", "/api/me", "/api/password", "/api/admin/users", "/api/admin/reset"] };
+export const config = { path: ["/api/data", "/api/register", "/api/login", "/api/me", "/api/password", "/api/admin/users", "/api/admin/reset", "/api/admin/export"] };
