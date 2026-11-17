@@ -27,15 +27,27 @@
     collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20l5-5 5 5M7 4l5 5 5-5"/></svg>',
   };
 
-  const TRIP_EMOJIS = ["🏖️","🏔️","🏙️","🏕️","✈️","🚗","🚆","⛷️","🌴","🏝️","🗺️","🎒","🌍","🚲","⛺","🏰","🎉","💼","❤️","🎿","🛳️","🌋","🍷","🎡"];
-  const GROUP_EMOJIS = ["👕","👖","🧥","👟","🧦","🩲","🩱","🕶️","🧢","🧴","🪥","💊","🩹","📄","🛂","💳","🔌","📱","🎧","💻","📷","🔋","🏖️","☂️","🎒","🍫","📚","🎮","🧸","🍼","🐶","🥾","🧤","🧣","⛺","🧳","🗝️","💄","🏊","🚗","📦","✨"];
+  // Iconos con nombre: [emoji, etiqueta]
+  const TRIP_TRANSPORT = [["✈️","Avión"],["🚗","Coche"],["🚆","Tren"],["🚢","Barco"],["🚌","Autobús"],["🏍️","Moto"],["🚐","Caravana"],["🚲","Bici"]];
+  const TRIP_KINDS = [["🏖️","Playa"],["🏔️","Montaña"],["🏙️","Ciudad"],["⛷️","Nieve"],["🏕️","Camping"],["🏝️","Isla"],["🌍","Extranjero"],["🏡","Rural"],["💼","Trabajo"],["🎉","Fiesta"],["❤️","Romántica"],["🍷","Gastronomía"]];
+  const GROUP_ICONS = [
+    ["👕","Ropa"],["👟","Calzado"],["🧴","Aseo"],["💊","Botiquín"],["📄","Documentos"],["💳","Dinero"],
+    ["🔌","Electrónica"],["💻","Informática"],["🎮","Entreteni\u00ADmiento"],["📚","Lectura"],["🎧","Música"],["📷","Fotografía"],
+    ["🕶️","Accesorios"],["💄","Belleza"],["🏖️","Playa"],["🥾","Montaña"],["⛷️","Nieve"],["⛺","Camping"],
+    ["🏊","Deporte"],["🍫","Comida"],["🧸","Niños"],["🐶","Mascotas"],["🚗","Coche"],["💼","Trabajo"],
+    ["☂️","Lluvia"],["🎁","Regalos"],["🗝️","Casa"],["📦","Otros"],
+  ];
+  const TRIP_EMOJIS = [...TRIP_TRANSPORT, ...TRIP_KINDS].map(([e]) => e);
+  const GROUP_EMOJIS = GROUP_ICONS.map(([e]) => e);
+  const LABELS = Object.fromEntries([...TRIP_TRANSPORT, ...TRIP_KINDS, ...GROUP_ICONS].map(([e, l]) => [e, l]));
   const EMOJI_HINTS = [
     [/ropa|vestir|prendas/i, "👕"], [/calzado|zapat|zapa/i, "👟"], [/aseo|higiene|baño|neceser/i, "🧴"],
-    [/medic|botiqu|salud|farmac/i, "💊"], [/document|papel|viaje|reserva/i, "📄"], [/electr|tecno|cargad|gadget/i, "🔌"],
-    [/playa|piscina|sol/i, "🏖️"], [/monta|trek|senderi|camping|acampa/i, "🥾"], [/nieve|esqu|frío|frio/i, "🧤"],
-    [/niñ|bebé|bebe|peque/i, "🧸"], [/comida|snack|picar|cocina/i, "🍫"], [/libro|lectura|ocio|jueg/i, "📚"],
-    [/perro|mascota|gato/i, "🐶"], [/maquill|belleza/i, "💄"], [/coche|auto/i, "🚗"], [/casa|antes de salir|hogar/i, "🗝️"],
-    [/dinero|pago|tarjeta/i, "💳"], [/foto|cámara|camara/i, "📷"], [/deporte|gym|nadar/i, "🏊"],
+    [/medic|botiqu|salud|farmac/i, "💊"], [/document|papel|reserva|pasaporte/i, "📄"], [/inform|ordenador|portátil|portatil|tablet/i, "💻"],
+    [/electr|tecno|cargad|gadget/i, "🔌"], [/entreten|ocio|jueg|consola/i, "🎮"], [/libro|lectura|leer/i, "📚"], [/música|musica|auricular/i, "🎧"],
+    [/playa|piscina|sol/i, "🏖️"], [/nieve|esqu|frío|frio/i, "⛷️"], [/camping|acampa|tienda/i, "⛺"], [/monta|trek|senderi/i, "🥾"],
+    [/niñ|bebé|bebe|peque/i, "🧸"], [/comida|snack|picar|cocina/i, "🍫"], [/perro|mascota|gato/i, "🐶"], [/maquill|belleza/i, "💄"],
+    [/coche|auto|viaje/i, "🚗"], [/casa|antes de salir|hogar/i, "🗝️"], [/dinero|pago|tarjeta/i, "💳"], [/foto|cámara|camara/i, "📷"],
+    [/deporte|gym|nadar/i, "🏊"], [/trabajo|oficina/i, "💼"], [/lluvia|paraguas/i, "☂️"], [/regalo/i, "🎁"], [/accesorio|gafas|gorra/i, "🕶️"],
   ];
   const guessEmoji = (name) => (EMOJI_HINTS.find(([re]) => re.test(name)) || [, "📦"])[1];
 
@@ -56,7 +68,7 @@
     ],
     montana: [
       ["Documentos", "📄", ["DNI", "Tarjetas y algo de efectivo", "Reservas / refugio"]],
-      ["Ropa", "🧥", ["Capa térmica", "Forro polar", "Chaqueta impermeable", "Pantalón de montaña", "Calcetines técnicos", "Gorro y guantes"]],
+      ["Ropa", "👕", ["Capa térmica", "Forro polar", "Chaqueta impermeable", "Pantalón de montaña", "Calcetines técnicos", "Gorro y guantes"]],
       ["Equipo", "🥾", ["Botas", "Mochila", "Bastones", "Frontal", "Cantimplora", "Mapa / track descargado"]],
       ["Botiquín", "💊", ["Tiritas y apósitos", "Analgésicos", "Crema solar", "Protector labial"]],
       ["Comida", "🍫", ["Frutos secos", "Barritas", "Bocadillos"]],
@@ -561,7 +573,24 @@
 
   function emojiPicker(anchor, list, current, onPick) {
     popover(anchor, `<div class="emoji-grid">${list.map((e) =>
-      `<button data-v="${esc(e)}" class="${e === current ? "sel" : ""}">${e}</button>`).join("")}</div>`, onPick);
+      `<button data-v="${esc(e)}" class="${e === current ? "sel" : ""}" title="${esc((LABELS[e] || "").replace(/\u00AD/g, ""))}" aria-label="${esc((LABELS[e] || e).replace(/\u00AD/g, ""))}">${e}</button>`).join("")}</div>`, onPick);
+  }
+  const iconChips = (list, sel) => `<div class="icon-grid">${list.map(([e, l]) =>
+    `<button type="button" class="icon-chip ${e === sel ? "sel" : ""}" data-e="${e}" data-l="${esc(l)}"><span class="e">${e}</span><span class="l">${esc(l)}</span></button>`).join("")}</div>`;
+
+  // Botón ✓ de la barra del teclado en iPhone: solo quita el foco, sin pulsar Enter.
+  // Si el campo pierde el foco sin que se haya tocado nada en la página, lo tratamos como Enter.
+  let lastPointer = 0;
+  document.addEventListener("pointerdown", () => { lastPointer = Date.now(); }, true);
+  function onKeyboardDone(input, fn) {
+    input.addEventListener("blur", (e) => {
+      if (e.relatedTarget || Date.now() - lastPointer < 600) return;
+      setTimeout(() => {
+        if (document.visibilityState !== "visible" || !document.hasFocus() || !input.isConnected) return;
+        if (document.activeElement && document.activeElement !== document.body) return;
+        fn();
+      }, 60);
+    });
   }
 
   function modal(html, onMount) {
@@ -629,8 +658,8 @@
       <h2>Nueva escapada</h2>
       <label class="field"><span>Nombre</span><input type="text" name="name" placeholder="Ej. Lisboa en diciembre" maxlength="80"></label>
       <label class="field"><span>Cuándo (opcional)</span><input type="text" name="when" placeholder="Ej. 5–8 dic · 3 noches" maxlength="80"></label>
-      <div class="field"><span>Icono</span><div class="emoji-row">${TRIP_EMOJIS.slice(0, 16).map((e) =>
-        `<button type="button" data-e="${e}" class="${e === emoji ? "sel" : ""}">${e}</button>`).join("")}</div></div>
+      <div class="field"><span>¿Cómo viajas?</span>${iconChips(TRIP_TRANSPORT, emoji)}</div>
+      <div class="field"><span>…o qué tipo de escapada</span>${iconChips(TRIP_KINDS, emoji)}</div>
       <div class="field"><span>Empezar con</span>
         <div class="choices">
           <label class="choice"><input type="radio" name="tpl" value="basica" checked><div><b>Lista básica</b><small>Documentos, ropa, aseo, electrónica…</small></div></label>
@@ -646,12 +675,12 @@
         <button class="btn primary" data-ok>Crear escapada</button>
       </div>`, (m, close) => {
       let emojiChosen = false;
-      const paintEmoji = () => $$(".emoji-row button", m).forEach((x) => x.classList.toggle("sel", x.dataset.e === emoji));
-      $$(".emoji-row button", m).forEach((b) => b.addEventListener("click", () => {
+      const paintEmoji = () => $$(".icon-chip", m).forEach((x) => x.classList.toggle("sel", x.dataset.e === emoji));
+      $$(".icon-chip", m).forEach((b) => b.addEventListener("click", () => {
         emoji = b.dataset.e; emojiChosen = true; paintEmoji();
       }));
       $$("input[name=tpl]", m).forEach((r) => r.addEventListener("change", () => {
-        const auto = { playa: "🏖️", montana: "🏔️", basica: "✈️" }[r.value];
+        const auto = { playa: "🏖️", montana: "🏔️" }[r.value];
         if (!emojiChosen && auto) { emoji = auto; paintEmoji(); }
       }));
       const sel = $("select[name=copyFrom]", m);
@@ -670,7 +699,10 @@
         location.hash = "#/e/" + trip.id;
       };
       $("[data-ok]", m).addEventListener("click", create);
-      $$("input[type=text]", m).forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); }));
+      $$("input[type=text]", m).forEach((i) => {
+        i.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+        onKeyboardDone(i, () => { if (clampText($("input[name=name]", m).value)) create(); });
+      });
     });
   }
 
@@ -678,17 +710,21 @@
     modal(`
       <h2>Nuevo grupo</h2>
       <label class="field"><span>Nombre del grupo</span><input type="text" name="name" placeholder="Ej. Ropa, Aseo, Para el coche…" maxlength="60"></label>
-      <div class="field"><span>Icono</span><div class="emoji-row" id="gemo">${GROUP_EMOJIS.slice(0, 24).map((e) =>
-        `<button type="button" data-e="${e}">${e}</button>`).join("")}</div></div>
+      <div class="field"><span>Icono · toca uno para usar también su nombre</span><div id="gemo">${iconChips(GROUP_ICONS, null)}</div></div>
       <div class="modal-actions">
         <button class="btn ghost" data-close>Cancelar</button>
         <button class="btn primary" data-ok>Añadir grupo</button>
       </div>`, (m, close) => {
       let emoji = null, auto = "📦";
       const input = $("input[name=name]", m);
-      const paint = () => $$("#gemo button", m).forEach((x) => x.classList.toggle("sel", x.dataset.e === (emoji || auto)));
-      input.addEventListener("input", () => { auto = guessEmoji(input.value); paint(); });
-      $$("#gemo button", m).forEach((b) => b.addEventListener("click", () => { emoji = b.dataset.e; paint(); }));
+      let autoName = "";
+      const paint = () => $$("#gemo .icon-chip", m).forEach((x) => x.classList.toggle("sel", x.dataset.e === (emoji || auto)));
+      input.addEventListener("input", () => { auto = guessEmoji(input.value); autoName = ""; paint(); });
+      $$("#gemo .icon-chip", m).forEach((b) => b.addEventListener("click", () => {
+        emoji = b.dataset.e;
+        if (!input.value.trim() || input.value === autoName) { input.value = autoName = b.dataset.l.replace(/\u00AD/g, ""); }
+        paint();
+      }));
       const create = () => {
         const name = clampText(input.value, 60);
         if (!name) { input.focus(); return; }
@@ -700,6 +736,7 @@
       };
       $("[data-ok]", m).addEventListener("click", create);
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+      onKeyboardDone(input, () => { if (clampText(input.value)) create(); });
     });
   }
 
@@ -795,12 +832,12 @@
     });
   }
 
-  function addItems(trip, g, texts) {
+  function addItems(trip, g, texts, { refocus = true } = {}) {
     const clean = texts.map((t) => clampText(t)).filter(Boolean);
     if (!clean.length) return;
     clean.forEach((text) => g.items.push({ id: uid(), text, done: false }));
     if (g.collapsed) g.collapsed = false;
-    focusAfterRender = `.add-item[data-gid="${g.id}"] input`;
+    if (refocus) focusAfterRender = `.add-item[data-gid="${g.id}"] input`;
     commit(trip);
   }
 
@@ -857,7 +894,20 @@
     e.preventDefault();
     const trip = findTrip(route().id);
     const g = trip && findGroup(trip, form.dataset.gid);
-    if (g) addItems(trip, g, [form.elements.text.value]);
+    const text = form.elements.text.value;
+    form.elements.text.value = "";
+    if (g) addItems(trip, g, [text]);
+  });
+
+  // Si se sale del campo «Añadir ítem…» con texto (✓ del teclado del iPhone, tocar fuera…), se añade igual.
+  app.addEventListener("focusout", (e) => {
+    const input = e.target.closest && e.target.closest(".add-item input");
+    if (!input || !input.value.trim() || document.visibilityState !== "visible") return;
+    const trip = findTrip(route().id);
+    const g = trip && findGroup(trip, input.form.dataset.gid);
+    const text = input.value;
+    input.value = "";
+    if (g) setTimeout(() => addItems(trip, g, [text], { refocus: false }), 0);
   });
 
   // Pegar varias líneas = varios ítems
