@@ -352,7 +352,8 @@ body.dragging-groups .group .group-body, body.dragging-groups .group .group-prog
 .btn.wide { width: 100%; justify-content: center; height: 48px; font-size: 16px; }
 .btn:disabled { opacity: .6; }
 .login-error { color: var(--danger); font-size: 14px; min-height: 18px; margin: -4px 0 10px; }
-.login-note { color: var(--muted); font-size: 13px; margin: 14px 0 0; text-align: center; }
+.login-note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 14px 0 0; text-align: center; }
+.login-note b { color: var(--ink-2); }
 
 .user-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .user-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--bg); }

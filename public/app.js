@@ -919,7 +919,7 @@
             <div class="login-error" role="alert"></div>
             <button class="btn primary wide" type="submit">${reg ? "Crear cuenta y entrar" : "Entrar"}</button>
           </form>
-          <p class="login-note">${reg ? "Recuerda tu nombre y contraseña: los necesitarás para entrar desde otros dispositivos." : "¿Primera vez? Toca «Crear cuenta».<br>¿Olvidaste la contraseña? Pide a quien administra la app que te dé una temporal."}</p>
+          <p class="login-note">${reg ? "Recuerda tu nombre y contraseña: los necesitarás para entrar desde otros dispositivos." : "¿Primera vez? Toca «Crear cuenta».<br>¿Olvidaste la contraseña? <b>Ponte en contacto con Javi</b>."}</p>
         </div>
       </main>`;
     $$(".seg button", app).forEach((b) => b.addEventListener("click", () => { loginMode = b.dataset.mode; renderLogin(); }));
@@ -939,7 +939,9 @@
         if (!res.ok) throw new Error(data.error || "No se pudo conectar");
         login(data, password);
       } catch (ex) {
-        err.textContent = navigator.onLine ? ex.message : "Sin conexión: necesitas internet para entrar";
+        err.textContent = !navigator.onLine ? "Sin conexión: necesitas internet para entrar"
+          : /incorrect/i.test(ex.message) ? ex.message + ". ¿La has olvidado? Ponte en contacto con Javi."
+          : ex.message;
         btn.disabled = false;
       }
     });
