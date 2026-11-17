@@ -276,10 +276,19 @@ export default async (req) => {
       const ik = process.env.IMPORT_KEY;
       const given = req.headers.get("x-import-key") || "";
       if (!ik || given.length !== ik.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(ik))) return json({ error: "No autorizado" }, 403);
-      const existing = await store.list({ prefix: "users/" });
-      if (existing.blobs.length) return json({ error: "Ya hay usuarios: la importación solo se hace una vez" }, 409);
+      if (await store.get("meta/imported")) return json({ error: "La importación ya se hizo y está bloqueada" }, 409);
       const dump = await readBody(req);
       if (!Array.isArray(dump.users)) return json({ error: "Exportación no válida" }, 400);
+      const existing = await store.list({ prefix: "users/" });
+      if (existing.blobs.length && !dump.replace) return json({ error: "Ya hay usuarios: la importación solo se hace una vez" }, 409);
+      // replace: vacía MiMaleta (cuentas de prueba) antes de cargar la copia
+      if (dump.replace) {
+        for (const prefix of ["users/", "emails/", "data/", "resets/", "ratelimit/"]) {
+          const { blobs } = await store.list({ prefix });
+          for (const b of blobs) await store.delete(b.key);
+        }
+        for (const k of ["meta/admin", "meta/legacy-owner"]) await store.delete(k);
+      }
       let users = 0, trips = 0;
       for (const u of dump.users) {
         if (!u || !u.id || !u.name || !u.hash || !u.salt) continue;
@@ -290,6 +299,7 @@ export default async (req) => {
         users++;
       }
       for (const k of ["meta/admin", "meta/legacy-owner"]) if (dump.meta && dump.meta[k]) await store.set(k, dump.meta[k]);
+      await store.set("meta/imported", String(Date.now()));   // no se puede volver a importar
       return json({ ok: true, users, trips });
     }
 
