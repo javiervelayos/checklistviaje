@@ -1,6 +1,6 @@
 # 🧳 MiMaleta: checklist de viaje (versión con recuperación por email)
 
-> Rama `mimaleta` → https://mimaleta.netlify.app · La versión original sigue en la rama `main` (Maleta).
+> Rama `mimaleta` → https://mimaletacompleta.netlify.app · La versión original sigue en la rama `main` (Maleta).
 
 App web para preparar el equipaje de cada escapada. Puedes crear escapadas, organizarlas en grupos (Ropa, Aseo, Documentos…) y añadir, editar, marcar, reordenar y eliminar ítems. Los cambios se guardan en Netlify y aparecen en todos tus dispositivos.
 
@@ -45,7 +45,7 @@ Cada persona crea su cuenta con **nombre y contraseña** y solo ve sus escapadas
 - Para que nadie más pueda crear cuentas: en Netlify, *Environment variables* → `ALLOW_SIGNUP` = `false` y volver a desplegar. Las cuentas existentes siguen funcionando.
 - **Cambiar contraseña:** menú de la inicial → «Cambiar contraseña». Cierra la sesión en los demás dispositivos.
 - **Contraseña olvidada por email:** en la pantalla de entrada, «¿Olvidaste la contraseña?» → nombre o email → si la cuenta tiene email, llega un enlace (Brevo) válido 1 hora y de un solo uso. Máximo un email cada 2 minutos por cuenta. Cada usuario añade su email en su menú («Mi email») o al crear la cuenta.
-- Variables en Netlify: `BREVO_API_KEY` (secreta), `MAIL_FROM` (`mimaleta@jvelayos.es`), `MAIL_FROM_NAME` (`MiMaleta`), `APP_URL` (`https://mimaleta.netlify.app`). El dominio jvelayos.es está autenticado en Brevo (registros DNS en Hostinger).
+- Variables en Netlify: `BREVO_API_KEY` (secreta), `MAIL_FROM` (`mimaleta@jvelayos.es`), `MAIL_FROM_NAME` (`MiMaleta`), `APP_URL` (`https://mimaletacompleta.netlify.app`). El dominio jvelayos.es está autenticado en Brevo (registros DNS en Hostinger).
 - **Contraseña olvidada sin email:** la cuenta administradora (la que se quedó las escapadas antiguas o, si no, la más antigua) tiene «Usuarios y contraseñas» en su menú. Ahí puede dar una contraseña temporal a cualquiera; al entrar con ella hay que elegir una nueva y se cierran sus sesiones abiertas. Las escapadas no se tocan.
 
 ## Cómo funciona la sincronización
